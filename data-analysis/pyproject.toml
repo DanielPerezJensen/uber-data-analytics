@@ -14,6 +14,7 @@ dependencies = [
     "jupyter>=1.1.1",
     "load-dotenv>=0.1.0",
     "loguru>=0.7.3",
+    "nbstripout>=0.8.1",
     "pandas>=2.3.2",
     "pre-commit>=4.3.0",
     "ruff>=0.12.11",
