@@ -1,6 +1,6 @@
 import os
 
-import pandas as pd
+# import pandas as pd
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from loguru import logger

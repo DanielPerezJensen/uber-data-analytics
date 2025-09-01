@@ -40,21 +40,21 @@ resource "google_project_iam_member" "gcs_pubsub_publishing" {
 
 # Grant all necesarry permissions to the service account running the function
 resource "google_project_iam_member" "invoking" {
-  project    = var.gcp_project_id
-  role       = "roles/run.invoker"
-  member     = "serviceAccount:${google_service_account.data_analytics_sa.email}"
+  project = var.gcp_project_id
+  role    = "roles/run.invoker"
+  member  = "serviceAccount:${google_service_account.data_analytics_sa.email}"
 }
 
 resource "google_project_iam_member" "event_receiving" {
-  project    = var.gcp_project_id
-  role       = "roles/eventarc.eventReceiver"
-  member     = "serviceAccount:${google_service_account.data_analytics_sa.email}"
+  project = var.gcp_project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.data_analytics_sa.email}"
 }
 
 resource "google_project_iam_member" "artifactregistry_reader" {
-  project    = var.gcp_project_id
-  role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.data_analytics_sa.email}"
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.data_analytics_sa.email}"
 }
 
 # Configure the Cloud Function using previously defined resources
