@@ -6,6 +6,13 @@ provider "google" {
   region  = var.gcp_region
 }
 
+# Refer to manually created bucket
+terraform {
+  backend "gcs" {
+    bucket = "uber-data-analysis-470512-terraform-remote-backend"
+  }
+}
+
 # Service Account for Data Analytics
 resource "google_service_account" "data_analytics_sa" {
   account_id   = "uber-da-sa"

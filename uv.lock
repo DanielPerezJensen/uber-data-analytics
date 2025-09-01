@@ -722,7 +722,7 @@ wheels = [
 ]
 
 [[package]]
-name = "uber-data-analytics"
+name = "uber-data-analysis"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

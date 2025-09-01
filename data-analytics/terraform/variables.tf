@@ -28,3 +28,9 @@ variable "personal_email" {
   description = "Your personal email for ACLs."
   default     = "danielperezjensen@gmail.com"
 }
+
+variable "gcp_credentials_file" {
+  type        = string
+  description = "Path to the GCP credentials JSON file."
+  default     = "../.config/key.json"
+}
