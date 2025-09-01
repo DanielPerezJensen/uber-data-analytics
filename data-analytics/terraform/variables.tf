@@ -1,7 +1,7 @@
 variable "gcp_project_id" {
   type        = string
   description = "GCP project ID."
-  default = "uber-data-analysis-470512"
+  default     = "uber-data-analysis-470512"
 }
 
 variable "gcp_region" {
