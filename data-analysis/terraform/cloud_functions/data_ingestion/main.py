@@ -43,9 +43,7 @@ def load_data_from_gcs_to_bigquery(event, context):
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
     )
 
-    load_job = bigquery_client.load_table_from_uri(
-        gcs_uri, table_ref, job_config=job_config
-    )
+    load_job = bigquery_client.load_table_from_uri(gcs_uri, table_ref, job_config=job_config)
 
     load_job.result()  # Wait for the job to complete
 

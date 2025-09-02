@@ -35,9 +35,7 @@ if __name__ == "__main__":
     dataset_id = os.getenv("BQ_DATASET")
     table_id = "staging"
 
-    if not all([dataset_id, table_id]) and not all(
-        isinstance(var, str) for var in [dataset_id, table_id]
-    ):
+    if not all([dataset_id, table_id]) and not all(isinstance(var, str) for var in [dataset_id, table_id]):
         raise ValueError(
             f"One or more required env vars are missing or not strings: dataset_id={dataset_id}, table_id={table_id}"
         )
