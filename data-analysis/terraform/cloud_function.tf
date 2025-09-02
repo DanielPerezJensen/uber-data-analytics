@@ -4,8 +4,8 @@
 # Create a zip archive of the Cloud Function source code
 data "archive_file" "function_zip" {
   type        = "zip"
-  source_dir  = "../cloud_functions/data_ingestion"
-  output_path = "../cloud_functions/data_ingestion/tmp/function.zip"
+  source_dir  = "cloud_functions/data_ingestion"
+  output_path = "cloud_functions/data_ingestion/tmp/function.zip"
 }
 
 # Upload the zip file to a GCS bucket
