@@ -39,8 +39,7 @@ if __name__ == "__main__":
         isinstance(var, str) for var in [dataset_id, table_id]
     ):
         raise ValueError(
-            f"One or more required env vars are missing or not strings: "
-            f"dataset_id={dataset_id}, table_id={table_id}"
+            f"One or more required env vars are missing or not strings: dataset_id={dataset_id}, table_id={table_id}"
         )
 
     df = read_data_from_bigquery(dataset_id, table_id)
