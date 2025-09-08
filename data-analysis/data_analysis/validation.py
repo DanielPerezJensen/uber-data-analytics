@@ -1,7 +1,8 @@
 import pandas as pd
 import pandera.pandas as pa
-import utils
 from loguru import logger
+
+import data_analysis.utils as utils
 
 raw_data_schema = pa.DataFrameSchema(
     {
