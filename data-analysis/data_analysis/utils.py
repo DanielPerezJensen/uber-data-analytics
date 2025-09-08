@@ -3,7 +3,7 @@ import sys
 import loguru
 
 
-def setup_logging(level: str):
+def setup_logging(level: str = "INFO"):
     logger = loguru.logger
     logger.remove()  # Remove default logger
 

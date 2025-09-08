@@ -42,7 +42,7 @@ def read_data_from_file(
     return df
 
 
-def read_raw_data_from_bigquery(
+def read_staging_data_from_bigquery(
     start_datetime: Optional[datetime.datetime] = None,
     end_datetime: Optional[datetime.datetime] = None,
 ):
@@ -97,8 +97,13 @@ def read_raw_data_from_bigquery(
 
 
 if __name__ == "__main__":
-    df = read_data_from_file(
-        "data/raw/ncr_ride_bookings.csv",
+    df_from_file = read_data_from_file(
+        "data/staging/ncr_ride_bookings.csv",
     )
 
-    df = read_raw_data_from_bigquery()
+    df_from_bq = read_staging_data_from_bigquery()
+
+    if df_from_file.equals(df_from_bq):
+        logger.info("Data from file and BigQuery are equal.")
+    else:
+        logger.warning("Data from file and BigQuery are NOT equal.")
