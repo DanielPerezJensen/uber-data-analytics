@@ -19,7 +19,7 @@ variable "bq_dataset_id" {
 variable "bq_table_staging_id" {
   type        = string
   description = "The BigQuery table ID for raw/staging data."
-  default     = "staging"
+  default     = "bronze"
 }
 
 # Treat personal email as deployment sa

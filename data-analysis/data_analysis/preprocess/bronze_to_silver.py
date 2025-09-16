@@ -1,44 +1,57 @@
+import os
+
 import fire
 import pandas as pd
+from dotenv import load_dotenv
 from loguru import logger
 
-from data_analysis.dataset import read_data_from_file  # , read_staging_data_from_bigquery
+from data_analysis.data_handling.data_handler import read_data_from_file  # , read_staging_data_from_bigquery
+from data_analysis.data_handling.validation import validate_bronze_df
 from data_analysis.utils import setup_logging
-from data_analysis.validation import validate_staging_data
 
 
 def run(log_level: str = "INFO"):
     setup_logging(log_level)
+    load_dotenv()
 
-    logger.info("Extracting data from file...")
-    dataframe = read_data_from_file("data/staging/ncr_ride_bookings.csv")
-    logger.success("Successfully extracted data from file.")
+    BRONZE_DATA_FILE = os.getenv("BRONZE_DATA_FILE")
+    SILVER_DATA_FILE = os.getenv("SILVER_DATA_FILE")
+
+    if not BRONZE_DATA_FILE:
+        raise ValueError("BRONZE_DATA_FILE environment variable is not set.")
+
+    if not SILVER_DATA_FILE:
+        raise ValueError("SILVER_DATA_FILE environment variable is not set.")
+
+    logger.info("Extracting BRONZE data from file...")
+    dataframe = read_data_from_file(BRONZE_DATA_FILE)
+    logger.success("Successfully extracted BRONZE data from file.")
 
     logger.info("Validating data")
-    validate_staging_data(dataframe)
+    validate_bronze_df(dataframe)
     logger.success("Data validation complete")
 
     logger.info("Transforming data")
-    dataframe = transform(dataframe)
+    dataframe = transform_to_silver(dataframe)
     logger.success("Data transformation complete")
 
-    logger.info("Data processing complete. Uploading data to processed csv...")
-    dataframe.to_csv("data/processed/processed_data.csv", index=False)
-    logger.success("Data uploaded to processed csv successfully.")
+    logger.info("Data processing complete. Uploading data to SILVER csv...")
+    dataframe.to_csv(SILVER_DATA_FILE, index=False)
+    logger.success("Data uploaded to SILVER csv successfully.")
 
-    # Create to bigquery and to feature store
+    # Create to bigquery
 
 
-def transform(staging_df: pd.DataFrame) -> pd.DataFrame:
+def transform_to_silver(bronze_df: pd.DataFrame) -> pd.DataFrame:
     # Perform data transformation here
 
-    processed_df = rename_columns(staging_df)
-    processed_df = cast_to_dtypes(processed_df)
-    processed_df = extract_temporal_features(processed_df)
-    processed_df = cancelled_to_flag(processed_df)
-    processed_df = missing_to_flag(processed_df)
+    silver_df = rename_columns(bronze_df)
+    silver_df = cast_to_dtypes(silver_df)
+    silver_df = extract_temporal_features(silver_df)
+    silver_df = cancelled_to_flag(silver_df)
+    silver_df = missing_to_flag(silver_df)
 
-    return processed_df
+    return silver_df
 
 
 def rename_columns(df):

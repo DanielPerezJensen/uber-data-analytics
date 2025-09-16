@@ -20,9 +20,9 @@ def load_data_from_gcs_to_bigquery(event, context):
     gcs_uri = f"gs://{gcs_bucket_name}/{gcs_file_name}"
 
     # Get environment variables set in Terraform
-    project_id = os.environ.get("GCP_PROJECT")
-    dataset_id = os.environ.get("BQ_DATASET")
-    table_id = os.environ.get("BQ_TABLE")
+    project_id = os.getenv("GCP_PROJECT")
+    dataset_id = os.getenv("BQ_DATASET")
+    table_id = os.getenv("BQ_TABLE")
 
     if not all([project_id, dataset_id, table_id]) and not all(
         isinstance(var, str) for var in [project_id, dataset_id, table_id]
