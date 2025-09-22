@@ -1,12 +1,12 @@
 [project]
-name = "uber-data-analysis"
+name = "data_analysis"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
+
 dependencies = [
-    "db-dtypes>=1.4.3",
-    "dython>=0.7.9",
+    "fire>=0.7.1",
     "flake8>=7.3.0",
     "geopy>=2.4.1",
     "google-api-python-client>=2.179.0",
@@ -17,10 +17,49 @@ dependencies = [
     "load-dotenv>=0.1.0",
     "loguru>=0.7.3",
     "nbstripout>=0.8.1",
+    "openmeteo-requests>=1.7.2",
     "pandas>=2.3.2",
-    "pre-commit>=4.3.0",
-    "ruff>=0.12.11",
+    "pandera>=0.26.1",
+    "polars>=1.33.1",
+    "requests-cache>=1.2.1",
+    "retry-requests>=2.0.0",
     "scikit-learn>=1.7.1",
     "seaborn>=0.13.2",
+    "tqdm>=4.67.1",
     "xgboost>=3.0.4",
+]
+
+[tool.uv]
+package = true
+default-groups = "all"
+
+[tool.setuptools.packages.find]
+where = ["data_analysis"]
+
+[dependency-groups]
+stubs = [
+    "scipy-stubs>=1.16.1.1",
+    "types-cachetools>=6.2.0.20250827",
+    "types-cffi>=1.17.0.20250822",
+    "types-colorama>=0.4.15.20250801",
+    "types-decorator>=5.2.0.20250324",
+    "types-defusedxml>=0.7.0.20250822",
+    "types-jsonschema>=4.25.1.20250822",
+    "types-openpyxl>=3.1.5.20250822",
+    "types-pexpect>=4.9.0.20250809",
+    "types-protobuf>=6.30.2.20250822",
+    "types-pyasn1>=0.6.0.20250516",
+    "types-pygments>=2.19.0.20250809",
+    "types-pyopenssl>=24.1.0.20240722",
+    "types-pyyaml>=6.0.12.20250822",
+    "types-requests>=2.32.4.20250809",
+    "types-shapely>=2.1.0.20250822",
+    "types-tqdm>=4.67.0.20250809",
+    "db-dtypes>=1.4.3",
+]
+
+dev = [
+    "mypy>=1.17.1",
+    "pre-commit>=4.3.0",
+    "ruff>=0.12.11",
 ]
