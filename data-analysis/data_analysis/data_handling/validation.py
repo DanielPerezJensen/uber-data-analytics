@@ -6,7 +6,7 @@ import data_analysis.utils as utils
 
 raw_data_schema = pa.DataFrameSchema(
     {
-        "Date": pa.Column(pa.String, nullable=False),
+        "Date": pa.Column(str, nullable=False),
     }
 )
 

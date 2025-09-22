@@ -240,6 +240,13 @@ def create_weather_table(
     return all_weather_df
 
 
+def ensure_string_column(df: pl.DataFrame, col: str) -> pl.DataFrame:
+    """Ensure a column is of type String, casting if necessary."""
+    if df.schema.get(col) != pl.String:
+        df = df.with_columns(pl.col(col).cast(pl.String).alias(col))
+    return df
+
+
 def create_gold_table(silver_df: pl.DataFrame, loc_df: pl.DataFrame, weather_df: pl.DataFrame) -> pl.DataFrame:
     """Create a gold table by merging silver data with location and weather data.
 
@@ -280,7 +287,9 @@ def create_gold_table(silver_df: pl.DataFrame, loc_df: pl.DataFrame, weather_df:
             "wind_speed_10m": "pickup_wind_speed_10m",
             "wind_speed_100m": "pickup_wind_speed_100m",
         }
-    ).with_columns(pl.col("pickup_weather_date").str.strptime(pl.Datetime))
+    )
+    pickup_weather = ensure_string_column(pickup_weather, "pickup_weather_date")
+    pickup_weather = pickup_weather.with_columns(pl.col("pickup_weather_date").str.strptime(pl.Datetime))
 
     gold_df = gold_df.sort(by="datetime").join_asof(
         pickup_weather.sort(by="pickup_weather_date"),
@@ -303,7 +312,9 @@ def create_gold_table(silver_df: pl.DataFrame, loc_df: pl.DataFrame, weather_df:
             "wind_speed_10m": "drop_wind_speed_10m",
             "wind_speed_100m": "drop_wind_speed_100m",
         }
-    ).with_columns(pl.col("drop_weather_date").str.strptime(pl.Datetime))
+    )
+    drop_weather = ensure_string_column(drop_weather, "drop_weather_date")
+    drop_weather = drop_weather.with_columns(pl.col("drop_weather_date").str.strptime(pl.Datetime))
 
     gold_df = gold_df.sort("datetime").join_asof(
         drop_weather.sort(by="drop_weather_date"),
