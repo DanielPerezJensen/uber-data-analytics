@@ -1,23 +1,23 @@
-import pandas as pd
-import pandera.pandas as pa
+import pandera.polars as pa
+import polars as pl
 from loguru import logger
 
 import data_analysis.utils as utils
 
 raw_data_schema = pa.DataFrameSchema(
     {
-        "Date": pa.Column(pa.String, nullable=False),
+        "Date": pa.Column(str, nullable=False),
     }
 )
 
 
-def validate_bronze_df(bronze_df: pd.DataFrame) -> pd.DataFrame:
+def validate_bronze_df(bronze_df: pl.DataFrame) -> pl.DataFrame:
     """Validates the BRONZE data using the defined schema. For now a fake schema is used, to be improved later.
 
-    :param bronze: DataFrame containing the BRONZE data
-    :return: Validated DataFrame
+    :param bronze_df: Polars DataFrame containing the BRONZE data
+    :return: Validated Polars DataFrame
     """
-    logger.info("Validating raw data with Pandera...")
+    logger.info("Validating raw data with Pandera (polars)...")
     try:
         # Use the `validate` method to check the DataFrame.
         # `lazy=True` ensures all validation errors are collected before raising an exception.
@@ -26,8 +26,6 @@ def validate_bronze_df(bronze_df: pd.DataFrame) -> pd.DataFrame:
         return validated_df
     except pa.errors.SchemaErrors as err:
         logger.error("Validation failed!")
-        # The `failure_cases` and `check` properties of the exception
-        # provide detailed information about what went wrong.
         logger.error("Schema Errors:")
         logger.error(err.failure_cases)
         raise err
@@ -36,6 +34,5 @@ def validate_bronze_df(bronze_df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     utils.setup_logging()
 
-    df = pd.read_csv("data/BRONZE/ncr_ride_bookings.csv")
-
+    df = pl.read_csv("data/bronze/ncr_ride_bookings.csv")
     validate_bronze_df(df)
