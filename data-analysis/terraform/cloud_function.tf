@@ -86,7 +86,7 @@ resource "google_cloudfunctions2_function" "data_ingestion_function" {
     environment_variables = {
       GCP_PROJECT = var.gcp_project_id
       BQ_DATASET  = google_bigquery_dataset.uber_analytics_dataset.dataset_id
-      BQ_TABLE    = google_bigquery_table.uber_analytics_table.table_id
+      BQ_TABLE    = google_bigquery_table.uber_analytics_bronze_table.table_id
     }
   }
 

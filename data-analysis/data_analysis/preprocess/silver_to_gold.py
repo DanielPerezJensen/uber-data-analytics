@@ -13,56 +13,73 @@ from retry_requests import retry
 from tqdm import tqdm
 
 import data_analysis.utils as utils
+from data_analysis.data_handling.data_handler import (
+    read_data_from_bigquery,
+    read_data_from_file,
+    upload_dataframe_to_bigquery,
+)
 
 utils.setup_logging("INFO")
 
 
-def run(log_level: str = "INFO"):
+def run(log_level: str = "INFO", bigquery_upload: bool = False):
     logger.info(" Starting silver to gold transformation")
     utils.setup_logging(log_level)
     load_dotenv()
 
     SILVER_DATA_FILE = os.getenv("SILVER_DATA_FILE")
-    GOLD_LOC_FILE = os.getenv("GOLD_LOC_FILE")
+    GOLD_LOCATIONS_FILE = os.getenv("GOLD_LOCATIONS_FILE")
     GOLD_WEATHER_FILE = os.getenv("GOLD_WEATHER_FILE")
     GOLD_RIDES_FILE = os.getenv("GOLD_RIDES_FILE")
 
     if not SILVER_DATA_FILE:
         raise ValueError("SILVER_DATA_FILE environment variable is not set.")
-    if not GOLD_LOC_FILE:
-        raise ValueError("GOLD_LOC_FILE environment variable is not set.")
+    if not GOLD_LOCATIONS_FILE:
+        raise ValueError("GOLD_LOCATIONS_FILE environment variable is not set.")
     if not GOLD_WEATHER_FILE:
         raise ValueError("GOLD_WEATHER_FILE environment variable is not set.")
     if not GOLD_RIDES_FILE:
         raise ValueError("GOLD_RIDES_FILE environment variable is not set.")
 
     logger.info("Grabbing silver data from file...")
-    silver_df = pd.read_csv(SILVER_DATA_FILE)
 
-    logger.info("Creating location table...")
-    if not os.path.exists(GOLD_LOC_FILE):
-        loc_df = create_location_table(silver_df)
-        loc_df.to_csv(GOLD_LOC_FILE, index=False)
-        logger.success(f"Location data uploaded to {GOLD_LOC_FILE} successfully.")
+    if bigquery_upload:
+        logger.info("Extracting SILVER data from BigQuery...")
+        silver_df = read_data_from_bigquery(table_env_var="GCP_BQ_SILVER_TABLE")
     else:
-        loc_df = pd.read_csv(GOLD_LOC_FILE)
-        logger.info(f"Location file {GOLD_LOC_FILE} already exists. Skipping creation.")
+        silver_df = read_data_from_file(SILVER_DATA_FILE)
 
-    logger.info("Creating weather table...")
-    if not os.path.exists(GOLD_WEATHER_FILE):
-        weather_df = create_weather_table(silver_df, loc_df)
-        weather_df.to_csv(GOLD_WEATHER_FILE, index=False)
-        logger.success(f"Weather data uploaded to {GOLD_WEATHER_FILE} successfully.")
-    else:
-        weather_df = pd.read_csv(GOLD_WEATHER_FILE)
-        logger.info(f"Weather file {GOLD_WEATHER_FILE} already exists. Skipping creation.")
+    loc_df = create_location_table(silver_df)
+    store_or_upload(loc_df, GOLD_LOCATIONS_FILE, bigquery_upload, "GCP_BQ_GOLD_LOCATIONS_TABLE", "Location data")
+
+    weather_df = create_weather_table(silver_df, loc_df)
+    store_or_upload(weather_df, GOLD_WEATHER_FILE, bigquery_upload, "GCP_BQ_GOLD_WEATHER_TABLE", "Weather data")
 
     logger.info("Creating gold table...")
-    gold_df = create_gold_table(silver_df, loc_df, weather_df)
-    gold_df.to_csv(GOLD_RIDES_FILE, index=False)
-    logger.success(f"Gold data uploaded to {GOLD_RIDES_FILE} successfully.")
+    gold_rides_df = create_gold_table(silver_df, loc_df, weather_df)
+    store_or_upload(gold_rides_df, GOLD_RIDES_FILE, bigquery_upload, "GCP_BQ_GOLD_RIDES_TABLE", "Gold data")
 
     logger.success("Finished silver to gold transformation")
+
+
+def store_or_upload(
+    df: pd.DataFrame, local_path: str, bigquery_flag: bool, table_env_var: str, table_name: str
+) -> None:
+    """Stores or uploads a DataFrame to a specified location.
+
+    :param df: DataFrame to be stored or uploaded
+    :param local_path: Local file path to save the DataFrame if not uploading
+    :param bigquery_flag: Flag indicating whether to upload to BigQuery
+    :param table_env_var: Environment variable for the BigQuery table
+    :param table_name: Name of the table being processed
+    """
+    if bigquery_flag:
+        logger.info(f"Uploading {table_name} to BigQuery...")
+        upload_dataframe_to_bigquery(df, table_env_var=table_env_var, if_exists="replace")
+        logger.success(f"{table_name} uploaded to BigQuery successfully.")
+    else:
+        df.to_csv(local_path, index=False)
+        logger.success(f"{table_name} saved to {local_path} successfully.")
 
 
 def get_loc(location_string: str, max_retries: int = 3, delay: float = 1.5):
@@ -240,7 +257,7 @@ def create_gold_table(silver_df: pd.DataFrame, loc_df: pd.DataFrame, weather_df:
     )
 
     # Convert datetime columns to pandas datetime
-    gold_df["datetime"] = pd.to_datetime(gold_df["datetime"])
+    gold_df["datetime"] = pd.to_datetime(gold_df["date"] + " " + gold_df["time"])
     weather_df["date"] = pd.to_datetime(weather_df["date"])
 
     # Merge for pickup location: find nearest weather record by hour

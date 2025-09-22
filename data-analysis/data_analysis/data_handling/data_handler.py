@@ -1,6 +1,4 @@
-import datetime
 import os
-from typing import Optional
 
 import pandas as pd
 import utils
@@ -13,57 +11,45 @@ utils.setup_logging("INFO")
 
 def read_data_from_file(
     file_path: str,
-    start_datetime: Optional[datetime.datetime] = None,
-    end_datetime: Optional[datetime.datetime] = None,
-    datetime_format: str = "%Y-%m-%d %H:%M:%S",
 ):
-    """Reads data from a CSV file and filters it based on the provided time range.
+    """Reads data from a CSV file
 
     :param file_path: Path to the CSV file
-    :param start_time: start_time, defaults to None
-    :param end_time: end_time, defaults to None
-    :return: Filtered data
+    :return: DataFrame containing the data
     """
 
     logger.info(f"Reading data from file: {file_path}")
     df = pd.read_csv(file_path)
-
-    df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"], format=datetime_format)
-
-    if start_datetime:
-        df = df[df["datetime"] >= start_datetime]
-    if end_datetime:
-        df = df[df["datetime"] <= end_datetime]
-
-    df.drop(columns=["datetime"], inplace=True)
 
     logger.success(f"Data read successfully with {len(df)} records after filtering.")
 
     return df
 
 
-def read_staging_data_from_bigquery(
-    start_datetime: Optional[datetime.datetime] = None,
-    end_datetime: Optional[datetime.datetime] = None,
+def read_data_from_bigquery(
+    table_env_var: str = "GCP_BQ_BRONZE_TABLE",
 ):
-    """Reads data from a BigQuery table and filters it based on the provided time range.
+    """Reads data from a BigQuery table
 
-    :param start_datetime: Start datetime for filtering, defaults to None
-    :param end_datetime: End datetime for filtering, defaults to None
     :return: Filtered data
     """
 
     load_dotenv()  # Load environment variables from .env file
 
-    bigquery_staging_data_table = os.getenv("BQ_STAGING_DATA_TABLE")
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_id = os.getenv("GCP_BQ_DATASET")
+    table_id = os.getenv(table_env_var)
+    full_table_id = f"{project_id}.{dataset_id}.{table_id}"
 
-    if not bigquery_staging_data_table:
-        logger.error("Environment variable BQ_STAGING_DATA_TABLE is not set.")
-        raise ValueError("Environment variable BQ_STAGING_DATA_TABLE is not set.")
+    if not all([project_id, dataset_id, table_id]):
+        logger.error(
+            f"Missing one or more required env vars: GCP_PROJECT_ID={project_id}, GCP_BQ_DATASET={dataset_id}, {table_env_var}={table_id}"
+        )
+        raise ValueError("Missing required environment variables for BigQuery upload.")
 
-    logger.info(f"Reading data from BigQuery table: {bigquery_staging_data_table}")
+    logger.info(f"Reading data from BigQuery table: {full_table_id}")
 
-    client = bigquery.Client()
+    client = bigquery.Client(location="europe-west4")
 
     query = f"""
     SELECT
@@ -71,29 +57,55 @@ def read_staging_data_from_bigquery(
     FROM (
         SELECT
         *,
-        PARSE_DATETIME('%Y-%m-%d %H:%M:%S', CONCAT(Date, ' ', Time)) AS datetime
         FROM
-        `{bigquery_staging_data_table}`
+        `{full_table_id}`
     )
-    WHERE
-        (datetime >= @start_datetime OR @start_datetime IS NULL)
-        AND (datetime <= @end_datetime OR @end_datetime IS NULL)
     """
-
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("start_datetime", "DATETIME", start_datetime),
-            bigquery.ScalarQueryParameter("end_datetime", "DATETIME", end_datetime),
-        ]
-    )
 
     logger.debug(f"Executing query: {query}")
 
-    df = client.query(query, job_config=job_config).to_dataframe()
+    df = client.query(query).to_dataframe()
 
-    logger.success(f"Data read successfully with {len(df)} records after filtering.")
+    # Convert all columns to string to avoid dtype issues
+    for col in df.columns:
+        df[col] = df[col].astype(str)
+
+    logger.success(f"Data read successfully with {len(df)} records.")
 
     return df
+
+
+def upload_dataframe_to_bigquery(df: pd.DataFrame, table_env_var: str, if_exists: str = "replace"):
+    """
+    Uploads a DataFrame to a BigQuery table specified by an environment variable.
+
+    :param df: DataFrame to upload
+    :param table_env_var: Name of the environment variable containing the table name (e.g., 'GCP_BQ_GOLD_RIDES_TABLE')
+    :param if_exists: 'append' (default) or 'replace' for table write disposition
+    """
+    load_dotenv()
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_id = os.getenv("GCP_BQ_DATASET")
+    table_id = os.getenv(table_env_var)
+    if not all([project_id, dataset_id, table_id]):
+        logger.error(
+            f"Missing one or more required env vars: GCP_PROJECT_ID={project_id}, GCP_BQ_DATASET={dataset_id}, {table_env_var}={table_id}"
+        )
+        raise ValueError("Missing required environment variables for BigQuery upload.")
+
+    full_table_id = f"{project_id}.{dataset_id}.{table_id}"
+    logger.info(f"Uploading DataFrame to BigQuery table: {full_table_id}")
+
+    client = bigquery.Client()
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+        if if_exists == "append"
+        else bigquery.WriteDisposition.WRITE_TRUNCATE,
+        autodetect=True,
+    )
+    job = client.load_table_from_dataframe(df, full_table_id, job_config=job_config)
+    job.result()
+    logger.success(f"Uploaded {df.shape[0]} rows to {full_table_id}.")
 
 
 if __name__ == "__main__":
@@ -101,7 +113,7 @@ if __name__ == "__main__":
         "data/staging/ncr_ride_bookings.csv",
     )
 
-    df_from_bq = read_staging_data_from_bigquery()
+    df_from_bq = read_data_from_bigquery(table_env_var="GCP_BQ_BRONZE_TABLE")
 
     if df_from_file.equals(df_from_bq):
         logger.info("Data from file and BigQuery are equal.")

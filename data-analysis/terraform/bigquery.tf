@@ -24,10 +24,38 @@ resource "google_bigquery_dataset_iam_member" "data_admin" {
   member     = "user:${var.personal_email}"
 }
 
-# BigQuery Table (created with a placeholder schema)
-resource "google_bigquery_table" "uber_analytics_table" {
+# BigQuery Table Definitions
+resource "google_bigquery_table" "uber_analytics_bronze_table" {
   dataset_id          = google_bigquery_dataset.uber_analytics_dataset.dataset_id
-  table_id            = var.bq_table_staging_id
+  table_id            = var.bq_table_bronze_id
+  project             = var.gcp_project_id
+  deletion_protection = false
+}
+
+resource "google_bigquery_table" "uber_analytics_silver_table" {
+  dataset_id          = google_bigquery_dataset.uber_analytics_dataset.dataset_id
+  table_id            = var.bq_table_silver_id
+  project             = var.gcp_project_id
+  deletion_protection = false
+}
+
+resource "google_bigquery_table" "uber_analytics_gold_locations_table" {
+  dataset_id          = google_bigquery_dataset.uber_analytics_dataset.dataset_id
+  table_id            = var.bq_table_gold_locations_id
+  project             = var.gcp_project_id
+  deletion_protection = false
+}
+
+resource "google_bigquery_table" "uber_analytics_gold_rides_table" {
+  dataset_id          = google_bigquery_dataset.uber_analytics_dataset.dataset_id
+  table_id            = var.bq_table_gold_rides_id
+  project             = var.gcp_project_id
+  deletion_protection = false
+}
+
+resource "google_bigquery_table" "uber_analytics_gold_weather_table" {
+  dataset_id          = google_bigquery_dataset.uber_analytics_dataset.dataset_id
+  table_id            = var.bq_table_gold_weather_id
   project             = var.gcp_project_id
   deletion_protection = false
 }

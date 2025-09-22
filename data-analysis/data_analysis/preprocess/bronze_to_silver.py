@@ -5,12 +5,16 @@ import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
 
-from data_analysis.data_handling.data_handler import read_data_from_file  # , read_staging_data_from_bigquery
+from data_analysis.data_handling.data_handler import (
+    read_data_from_bigquery,
+    read_data_from_file,
+    upload_dataframe_to_bigquery,
+)
 from data_analysis.data_handling.validation import validate_bronze_df
 from data_analysis.utils import setup_logging
 
 
-def run(log_level: str = "INFO"):
+def run(log_level: str = "INFO", bigquery_upload: bool = False):
     setup_logging(log_level)
     load_dotenv()
 
@@ -23,8 +27,13 @@ def run(log_level: str = "INFO"):
     if not SILVER_DATA_FILE:
         raise ValueError("SILVER_DATA_FILE environment variable is not set.")
 
-    logger.info("Extracting BRONZE data from file...")
-    dataframe = read_data_from_file(BRONZE_DATA_FILE)
+    if bigquery_upload:
+        logger.info("Extracting BRONZE data from BigQuery...")
+        dataframe = read_data_from_bigquery(table_env_var="GCP_BQ_BRONZE_TABLE")
+    else:
+        logger.info("Extracting BRONZE data from file...")
+        dataframe = read_data_from_file(BRONZE_DATA_FILE)
+
     logger.success("Successfully extracted BRONZE data from file.")
 
     logger.info("Validating data")
@@ -37,9 +46,13 @@ def run(log_level: str = "INFO"):
 
     logger.info("Data processing complete. Uploading data to SILVER csv...")
     dataframe.to_csv(SILVER_DATA_FILE, index=False)
-    logger.success("Data uploaded to SILVER csv successfully.")
+    logger.success("Data saved to SILVER csv successfully.")
 
     # Create to bigquery
+    if bigquery_upload:
+        logger.info("Uploading data to SILVER BigQuery table...")
+        upload_dataframe_to_bigquery(dataframe, table_env_var="GCP_BQ_SILVER_TABLE")
+        logger.success("Data uploaded to SILVER BigQuery table successfully.")
 
 
 def transform_to_silver(bronze_df: pd.DataFrame) -> pd.DataFrame:
