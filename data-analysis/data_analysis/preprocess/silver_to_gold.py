@@ -1,10 +1,10 @@
 import os
 import time
+from datetime import datetime
 
 import fire
-import numpy as np
 import openmeteo_requests
-import pandas as pd
+import polars as pl
 import requests_cache
 from dotenv import load_dotenv
 from geopy.geocoders import Nominatim
@@ -23,6 +23,11 @@ utils.setup_logging("INFO")
 
 
 def run(log_level: str = "INFO", bigquery_upload: bool = False):
+    """Run the silver to gold transformation process.
+
+    :param log_level: Logging level, defaults to "INFO"
+    :param bigquery_upload: Flag indicating whether to upload to BigQuery, defaults to False
+    """
     logger.info(" Starting silver to gold transformation")
     utils.setup_logging(log_level)
     load_dotenv()
@@ -49,11 +54,18 @@ def run(log_level: str = "INFO", bigquery_upload: bool = False):
     else:
         silver_df = read_data_from_file(SILVER_DATA_FILE)
 
-    loc_df = create_location_table(silver_df)
-    store_or_upload(loc_df, GOLD_LOCATIONS_FILE, bigquery_upload, "GCP_BQ_GOLD_LOCATIONS_TABLE", "Location data")
+    # For local runs this is necesarry, future work could think about how to grab from cloud
+    if os.path.exists(GOLD_LOCATIONS_FILE):
+        loc_df = pl.read_csv(GOLD_LOCATIONS_FILE)
+    else:
+        loc_df = create_location_table(silver_df)
+        store_or_upload(loc_df, GOLD_LOCATIONS_FILE, bigquery_upload, "GCP_BQ_GOLD_LOCATIONS_TABLE", "Location data")
 
-    weather_df = create_weather_table(silver_df, loc_df)
-    store_or_upload(weather_df, GOLD_WEATHER_FILE, bigquery_upload, "GCP_BQ_GOLD_WEATHER_TABLE", "Weather data")
+    if os.path.exists(GOLD_WEATHER_FILE):
+        weather_df = pl.read_csv(GOLD_WEATHER_FILE)
+    else:
+        weather_df = create_weather_table(silver_df, loc_df)
+        store_or_upload(weather_df, GOLD_WEATHER_FILE, bigquery_upload, "GCP_BQ_GOLD_WEATHER_TABLE", "Weather data")
 
     logger.info("Creating gold table...")
     gold_rides_df = create_gold_table(silver_df, loc_df, weather_df)
@@ -63,7 +75,7 @@ def run(log_level: str = "INFO", bigquery_upload: bool = False):
 
 
 def store_or_upload(
-    df: pd.DataFrame, local_path: str, bigquery_flag: bool, table_env_var: str, table_name: str
+    df: pl.DataFrame, local_path: str, bigquery_flag: bool, table_env_var: str, table_name: str
 ) -> None:
     """Stores or uploads a DataFrame to a specified location.
 
@@ -78,7 +90,7 @@ def store_or_upload(
         upload_dataframe_to_bigquery(df, table_env_var=table_env_var, if_exists="replace")
         logger.success(f"{table_name} uploaded to BigQuery successfully.")
     else:
-        df.to_csv(local_path, index=False)
+        df.write_csv(local_path)
         logger.success(f"{table_name} saved to {local_path} successfully.")
 
 
@@ -108,25 +120,22 @@ def get_loc(location_string: str, max_retries: int = 3, delay: float = 1.5):
                 return None, None
 
 
-def create_location_table(silver_df: pd.DataFrame):
+def create_location_table(silver_df: pl.DataFrame):
     """Create a location table with unique locations and their corresponding latitude and longitude.
 
     :param silver_df: DataFrame containing silver data with location information.
     :return: DataFrame containing unique locations and their latitude and longitude.
     """
-    unique_locations = list(silver_df["pickup_location"].unique()) + list(silver_df["drop_location"].unique())
+    pickup_locations = silver_df["pickup_location"]
+    drop_locations = silver_df["drop_location"]
+    unique_locations = set(pickup_locations) | set(drop_locations)
 
-    loc_dict = {unique_location: None for unique_location in unique_locations}
+    data = [
+        {"location": loc, "latitude": get_loc(loc)[0], "longitude": get_loc(loc)[1]}
+        for loc in tqdm(unique_locations, desc="Processing locations")
+    ]
 
-    for location in tqdm(loc_dict):
-        if loc_dict[location] is None:
-            loc_dict[location] = get_loc(location)
-
-    loc_df = (
-        pd.DataFrame.from_dict(loc_dict, orient="index", columns=["latitude", "longitude"])
-        .reset_index()
-        .rename(columns={"index": "location"})
-    )
+    loc_df = pl.DataFrame(data)
 
     return loc_df
 
@@ -163,6 +172,7 @@ def get_weather_info(long, lat, start_date="2024-01-01", end_date="2024-12-30", 
             response = responses[0]
 
             hourly = response.Hourly()
+
             hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
             hourly_rain = hourly.Variables(1).ValuesAsNumpy()
             hourly_snowfall = hourly.Variables(2).ValuesAsNumpy()
@@ -170,11 +180,12 @@ def get_weather_info(long, lat, start_date="2024-01-01", end_date="2024-12-30", 
             hourly_wind_speed_100m = hourly.Variables(4).ValuesAsNumpy()
 
             hourly_data = {
-                "date": pd.date_range(
-                    start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-                    end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-                    freq=pd.Timedelta(seconds=hourly.Interval()),
-                    inclusive="left",
+                "date": pl.datetime_range(
+                    start=datetime.fromtimestamp(hourly.Time()),
+                    end=datetime.fromtimestamp(hourly.TimeEnd()),
+                    interval="1h",
+                    closed="left",
+                    eager=True,
                 )
             }
 
@@ -197,23 +208,21 @@ def get_weather_info(long, lat, start_date="2024-01-01", end_date="2024-12-30", 
 
 
 def create_weather_table(
-    silver_df: pd.DataFrame,
-    loc_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """Create a weather table by fetching weather data for each location.
+    silver_df: pl.DataFrame,
+    loc_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Create a weather table by fetching weather data for each location."""
 
-    :param silver_df: DataFrame containing silver data with date information.
-    :param loc_df: DataFrame containing location information (latitude and longitude).
-    :return: DataFrame containing weather data for each location.
-    """
     min_date = silver_df["date"].min()
     max_date = silver_df["date"].max()
 
     weather_dfs = []
 
-    for idx, row in tqdm(loc_df.dropna().iterrows(), total=loc_df.dropna().shape[0]):
+    for row in tqdm(
+        loc_df.drop_nulls().iter_rows(named=True), total=loc_df.drop_nulls().height, desc="Processing weather"
+    ):
         location = row["location"]
-        if row["latitude"] == np.nan or row["longitude"] == np.nan:
+        if row["latitude"] is None or row["longitude"] is None:
             print(f"Skipping location {location} due to missing coordinates.")
             continue
         weather_data = get_weather_info(
@@ -222,19 +231,16 @@ def create_weather_table(
             start_date=min_date,
             end_date=max_date,
         )
-        weather_df = pd.DataFrame(weather_data)
-        weather_df["location"] = location
+        weather_df = pl.DataFrame(weather_data)
+        weather_df = weather_df.with_columns(pl.lit(location).alias("location"))
         weather_dfs.append(weather_df)
 
-    all_weather_df = pd.concat(weather_dfs, ignore_index=True)
-
-    # Convert date to format 2024-03-23 12:29:38
-    all_weather_df["date"] = pd.to_datetime(all_weather_df["date"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+    all_weather_df = pl.concat(weather_dfs)
 
     return all_weather_df
 
 
-def create_gold_table(silver_df: pd.DataFrame, loc_df: pd.DataFrame, weather_df: pd.DataFrame) -> pd.DataFrame:
+def create_gold_table(silver_df: pl.DataFrame, loc_df: pl.DataFrame, weather_df: pl.DataFrame) -> pl.DataFrame:
     """Create a gold table by merging silver data with location and weather data.
 
     :param silver_df: DataFrame containing silver data.
@@ -242,27 +248,30 @@ def create_gold_table(silver_df: pd.DataFrame, loc_df: pd.DataFrame, weather_df:
     :param weather_df: DataFrame containing weather data for each location.
     :return: DataFrame containing the gold table.
     """
-    gold_df = silver_df.merge(
-        loc_df.rename(
-            columns={"location": "pickup_location", "latitude": "pickup_latitude", "longitude": "pickup_longitude"}
-        ),
-        on="pickup_location",
-        how="left",
-    ).merge(
-        loc_df.rename(
-            columns={"location": "drop_location", "latitude": "drop_latitude", "longitude": "drop_longitude"}
-        ),
-        on="drop_location",
-        how="left",
+    # Rename columns for pickup join
+    pickup_loc_df = loc_df.rename(
+        {"location": "pickup_location", "latitude": "pickup_latitude", "longitude": "pickup_longitude"}
     )
 
-    # Convert datetime columns to pandas datetime
-    gold_df["datetime"] = pd.to_datetime(gold_df["date"] + " " + gold_df["time"])
-    weather_df["date"] = pd.to_datetime(weather_df["date"])
+    # Join on pickup_location
+    gold_df = silver_df.join(pickup_loc_df, left_on="pickup_location", right_on="pickup_location", how="left")
+
+    # Rename columns for drop join
+    drop_loc_df = loc_df.rename(
+        {"location": "drop_location", "latitude": "drop_latitude", "longitude": "drop_longitude"}
+    )
+
+    # Join on drop_location
+    gold_df = gold_df.join(drop_loc_df, left_on="drop_location", right_on="drop_location", how="left")
+
+    # Ensure datetime columns are parsed
+    gold_df = gold_df.with_columns(
+        pl.concat_str([pl.col("date"), pl.col("time")], separator=" ").str.strptime(pl.Datetime).alias("datetime")
+    )
 
     # Merge for pickup location: find nearest weather record by hour
     pickup_weather = weather_df.rename(
-        columns={
+        {
             "location": "pickup_location",
             "date": "pickup_weather_date",
             "temperature_2m": "pickup_temperature_2m",
@@ -271,20 +280,21 @@ def create_gold_table(silver_df: pd.DataFrame, loc_df: pd.DataFrame, weather_df:
             "wind_speed_10m": "pickup_wind_speed_10m",
             "wind_speed_100m": "pickup_wind_speed_100m",
         }
-    )
-    gold_df = pd.merge_asof(
-        gold_df.sort_values("datetime"),
-        pickup_weather.sort_values("pickup_weather_date"),
+    ).with_columns(pl.col("pickup_weather_date").str.strptime(pl.Datetime))
+
+    gold_df = gold_df.sort(by="datetime").join_asof(
+        pickup_weather.sort(by="pickup_weather_date"),
         left_on="datetime",
         right_on="pickup_weather_date",
         by="pickup_location",
-        direction="nearest",
-        tolerance=pd.Timedelta("1h"),
+        strategy="nearest",
+        tolerance="1h",
+        suffix="_pickup",
     )
 
     # Merge for drop location: find nearest weather record by hour
     drop_weather = weather_df.rename(
-        columns={
+        {
             "location": "drop_location",
             "date": "drop_weather_date",
             "temperature_2m": "drop_temperature_2m",
@@ -293,23 +303,23 @@ def create_gold_table(silver_df: pd.DataFrame, loc_df: pd.DataFrame, weather_df:
             "wind_speed_10m": "drop_wind_speed_10m",
             "wind_speed_100m": "drop_wind_speed_100m",
         }
-    )
-    gold_df = pd.merge_asof(
-        gold_df.sort_values("datetime"),
-        drop_weather.sort_values("drop_weather_date"),
+    ).with_columns(pl.col("drop_weather_date").str.strptime(pl.Datetime))
+
+    gold_df = gold_df.sort("datetime").join_asof(
+        drop_weather.sort(by="drop_weather_date"),
         left_on="datetime",
         right_on="drop_weather_date",
         by="drop_location",
-        direction="nearest",
-        tolerance=pd.Timedelta("1h"),
-        suffixes=("", "_drop"),
+        strategy="nearest",
+        tolerance="1h",
+        suffix="_drop",
     )
 
-    gold_df.drop(
+    gold_df = gold_df.drop(
         ["pickup_weather_date", "drop_weather_date"],
-        axis=1,
-        inplace=True,
     )
+
+    logger.info(f"Gold DataFrame created with {gold_df.height} rows and {gold_df.width} columns.")
 
     return gold_df
 

@@ -6,7 +6,7 @@ import data_analysis.utils as utils
 
 raw_data_schema = pa.DataFrameSchema(
     {
-        "Date": pa.Column(str, nullable=False),
+        "Date": pa.Column(pa.String, nullable=False),
     }
 )
 
@@ -34,5 +34,5 @@ def validate_bronze_df(bronze_df: pl.DataFrame) -> pl.DataFrame:
 if __name__ == "__main__":
     utils.setup_logging()
 
-    df = pl.read_csv("data/bronze/ncr_ride_bookings.csv")
+    df = pl.read_csv("data/BRONZE/ncr_ride_bookings.csv")
     validate_bronze_df(df)
