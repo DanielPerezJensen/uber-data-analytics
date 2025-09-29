@@ -1,0 +1,17 @@
+[project]
+name = "llm-companion"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "google-cloud-bigquery>=3.38.0",
+    "jupyter>=1.1.1",
+    "langchain>=0.3.27",
+    "langchain-core>=0.3.76",
+    "langchain-google-genai>=2.1.12",
+    "langgraph>=0.6.7",
+    "matplotlib>=3.10.6",
+    "polars>=1.33.1",
+]
